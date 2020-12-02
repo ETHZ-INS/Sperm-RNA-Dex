@@ -426,7 +426,7 @@ cluster1[, "cell"]
 ```
 
 
-# Monocle
+# Differential Expession analyses
 
 
 
@@ -436,33 +436,19 @@ library(biomaRt)
 ```
 
 
+
+Filtering metadata and getting aditional gene information from biomart
+
 ```{r}
-
-
-
 
 metadata_filtered <- metadata[ sample_file %in% colnames(TOTAL_gene_count_filtered), ]
 metadata_filtered <- data.frame(metadata_filtered, row.names=metadata_filtered$sample_file)
-
-
-#TOTAL_gene_count_filtered_matrix <- as.matrix(TOTAL_gene_count_filtered)
-
-#row.names( TOTAL_gene_count_filtered_matrix) <- TOTAL_gene_count_filtered$Geneid
-#n=ncol(TOTAL_gene_count_filtered_matrix)
-#TOTAL_gene_count_filtered_matrix <- as.matrix(TOTAL_gene_count_filtered_matrix)[, 2:n]
-#mode(TOTAL_gene_count_filtered_matrix) <- 'numeric'
-
-#gene_count_monocle <- TOTAL_gene_count_filtered_matrix[which(rowSds(TOTAL_gene_count_filtered_matrix)!=0),] 
-
-
-
-
 
 ```
 
 
 ```{r}
-gene_table <- data.table(getBM(attributes=c('ensembl_gene_id_version','ensembl_gene_id', 'entrezgene', "wikigene_description", "mgi_symbol"),filters = 'ensembl_gene_id_version', values = rownames(TOTAL_gene_count_filtered_matrix) , mart = ensembl))
+gene_table <- data.table(getBM(attributes=c('ensembl_gene_id_version',"ensembl_gene_id", "wikigene_description", "mgi_symbol"),filters = 'ensembl_gene_id_version', values = rownames(TOTAL_gene_count_filtered_matrix) , mart = ensembl))
 
 gene_table <- gene_table[gene_table[ , .I[sample(.N,1)] , by = ensembl_gene_id_version]$V1]  #eliminating duplicates
 gene_table <- as.data.frame(gene_table, row.names = gene_table$ensembl_gene_id_version)
@@ -470,6 +456,7 @@ gene_table$gene_short_name <- gene_table$mgi_symbol
 ```
 
 
+Extracting relevant infromation from gene clusters and differentially expressed genes from SC3
 
 ```{r}
 
@@ -489,14 +476,14 @@ gene_DE <- data.table(merge(gene_table, gene_DE, by.x='ensembl_gene_id_version',
 
 gene_markers[sort(sc3_2_markers_auroc)]
 
-write.table(gene_markers[sort(-sc3_2_markers_auroc)], file = "./cluster_marker_info.txt", append = FALSE, quote = F, sep = " ",
+write.table(gene_markers[sort(-sc3_2_markers_auroc)], file = "./output_tables/cluster_marker_info.txt", append = FALSE, quote = F, sep = " ",
             eol = "\n", na = "NA", dec = ".", row.names = F,
             col.names = TRUE, qmethod = c("escape", "double"),
             fileEncoding = "")
 
 gene_DE[sort(sc3_2_de_padj)]
 
-write.table( gene_DE , file = "./cluster_DE_info.txt", append = FALSE, quote = F, sep = "\t",
+write.table( gene_DE , file = "./output_tables/cluster_DE_info.txt", append = FALSE, quote = F, sep = "\t",
             eol = "\n", na = "NA", dec = ".", row.names = F,
             col.names = TRUE, qmethod = c("escape", "double"),
             fileEncoding = "")
@@ -504,6 +491,7 @@ write.table( gene_DE , file = "./cluster_DE_info.txt", append = FALSE, quote = F
 ```
 
 
+Generating countable for monocle analyses
 
 
 ```{r}
@@ -521,38 +509,22 @@ rownames(metadata_filtered) <- metadata_filtered$sample_file
 ```{r}
 
 
-
-#gene_table$gene_short_name <- gene_table$gene_name
-
 pd <- new("AnnotatedDataFrame", data = metadata_filtered)
 fd <- new("AnnotatedDataFrame", data = gene_table)
-HSMM <- newCellDataSet(gene_count_monocle, phenoData = pd, featureData = fd, expressionFamily=tobit() )
+HSMM <- newCellDataSet(gene_count_monocle, phenoData = pd, featureData = fd, expressionFamily=VGAM::tobit() )
 
 HSMM <- detectGenes(HSMM, min_expr = 0.1)
 
 expressed_genes <- row.names(subset(fData(HSMM),
     num_cells_expressed >= 11))
 
-#HSMM1 <- newCellDataSet(TOTAL_gene_count_filtered_matrix, phenoData = pd, featureData = fd, expressionFamily=tobit() )
-#HSMM2 <- newCellDataSet(TOTAL_gene_count_filtered_matrix, phenoData = pd, featureData = fd, expressionFamily=tobit() )
 
-
-```
-
-
-```{r}
 
 expressed_genes_mart <- data.table(getBM(attributes=c('ensembl_gene_id_version', "mgi_symbol"),filters = 'ensembl_gene_id_version', values = expressed_genes , mart = ensembl))
-
-
-cat(expressed_genes_mart$mgi_symbol, sep="\n")
-
-paste(gene_DE[, mgi_symbol], sep=" ")
 ```
 
 
-
-#Spike-ins
+Attempting to incorporate Spike-ins data for the quantification
 
 
 
@@ -597,17 +569,17 @@ mode(ERCC_count_table_matrix) <- 'numeric'
 ```{r}
 
 
-input.ERCC.annotation<-read.delim("~/Google_Drive/Results/Kathi/ERCCs/ERCC_Controls_Analysis.txt", header=T)
+input.ERCC.annotation<-read.delim("data/ERCC_Controls_Analysis.txt", header=T)
 colnames(input.ERCC.annotation)<-c("Resort_ID","ERCC_ID","subgroup","conc_attomoles_ul_Mix1","conc_attomoles_ul_Mix2","exp_fch_ratio","log2_Mix1_Mix2")
 rownames(input.ERCC.annotation)<-input.ERCC.annotation[,"ERCC_ID"]
 
 
 
 
-ERCC_Controls_Annotation <- read_delim("~/Google_Drive/Results/Kathi/ERCCs/ERCC_Controls_Annotation.txt", 
+ERCC_Controls_Annotation <- read_delim("data//ERCC_Controls_Annotation.txt", 
     "\t", escape_double = FALSE, trim_ws = TRUE)
 
-ERCC_Controls_Analysis <- read_delim("~/Google_Drive/Results/Kathi/ERCCs/ERCC_Controls_Analysis.txt", 
+ERCC_Controls_Analysis <- read_delim("data//ERCC_Controls_Analysis.txt", 
     "\t", escape_double = FALSE, trim_ws = TRUE)
 
 
@@ -629,7 +601,7 @@ rpc_matrix <- relative2abs(HSMM, method = "num_genes")
 
 ```
 
-# Simulated spike-ins
+Simulating spike-ins
 
 ```{r}
 
@@ -644,7 +616,7 @@ HSMM <- newCellDataSet(as(as.matrix(rpc_matrix), "sparseMatrix"),
 ```
 
 
-# real Spike-ins
+To run the analysis with real Spike-ins, activate the following code. However, the results obtained in this case with simulated spike ins are much better quality and were the ones we used for Gapp et al 2020
 
 ```{r}
 
